@@ -1,8 +1,4 @@
-# smartmirror.py
-# requirements
-# requests, feedparser, traceback, Pillow
-
-from Tkinter import *
+from tkinter import *
 import locale
 import threading
 import time
@@ -10,6 +6,10 @@ import requests
 import json
 import traceback
 import feedparser
+from datetime import datetime
+from dateutil import tz
+
+
 
 from PIL import Image, ImageTk
 from contextlib import contextmanager
@@ -19,7 +19,7 @@ LOCALE_LOCK = threading.Lock()
 ui_locale = '' # e.g. 'fr_FR' fro French, '' as default
 time_format = 12 # 12 or 24
 date_format = "%b %d, %Y" # check python doc for strftime() for options
-news_country_code = 'us'
+news_country_code = 'IN'
 weather_api_token = '<TOKEN>' # create account at https://darksky.net/dev/
 weather_lang = 'en' # see https://darksky.net/dev/docs/forecast for full list of language parameters values
 weather_unit = 'us' # see https://darksky.net/dev/docs/forecast for full list of unit parameters values
@@ -27,8 +27,8 @@ latitude = None # Set this if IP location lookup does not work for you (must be 
 longitude = None # Set this if IP location lookup does not work for you (must be a string)
 xlarge_text_size = 94
 large_text_size = 48
-medium_text_size = 28
-small_text_size = 18
+medium_text_size = 20
+small_text_size = 13
 
 @contextmanager
 def setlocale(name): #thread proof function to work with locale
@@ -67,11 +67,11 @@ class Clock(Frame):
         self.timeLbl.pack(side=TOP, anchor=E)
         # initialize day of week
         self.day_of_week1 = ''
-        self.dayOWLbl = Label(self, text=self.day_of_week1, font=('Helvetica', small_text_size), fg="white", bg="black")
+        self.dayOWLbl = Label(self, text=self.day_of_week1, font=('Helvetica', medium_text_size), fg="white", bg="black")
         self.dayOWLbl.pack(side=TOP, anchor=E)
         # initialize date label
         self.date1 = ''
-        self.dateLbl = Label(self, text=self.date1, font=('Helvetica', small_text_size), fg="white", bg="black")
+        self.dateLbl = Label(self, text=self.date1, font=('Helvetica', medium_text_size), fg="white", bg="black")
         self.dateLbl.pack(side=TOP, anchor=E)
         self.tick()
 
@@ -108,18 +108,46 @@ class Weather(Frame):
         self.location = ''
         self.currently = ''
         self.icon = ''
+        self.temp=''
+        self.wind_speed=''
+        self.description=''
+        self.sunrise=''
+        self.sunset=''
+        self.Latest_Confirmed=''
+        self.Latest_Recovered=''
+        self.Latest_Deaths=''
+        self.Covid='Latest Coronavirus Update'
         self.degreeFrm = Frame(self, bg="black")
         self.degreeFrm.pack(side=TOP, anchor=W)
-        self.temperatureLbl = Label(self.degreeFrm, font=('Helvetica', xlarge_text_size), fg="white", bg="black")
-        self.temperatureLbl.pack(side=LEFT, anchor=N)
-        self.iconLbl = Label(self.degreeFrm, bg="black")
-        self.iconLbl.pack(side=LEFT, anchor=N, padx=20)
-        self.currentlyLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
-        self.currentlyLbl.pack(side=TOP, anchor=W)
-        self.forecastLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
-        self.forecastLbl.pack(side=TOP, anchor=W)
-        self.locationLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
+#         self.temperatureLbl = Label(self.degreeFrm, font=('Helvetica', xlarge_text_size), fg="white", bg="black")
+#         self.temperatureLbl.pack(side=LEFT, anchor=N)
+#         self.iconLbl = Label(self.degreeFrm, bg="black")
+#         self.iconLbl.pack(side=LEFT, anchor=N, padx=20)
+#         self.currentlyLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
+#         self.currentlyLbl.pack(side=TOP, anchor=W)
+#         self.forecastLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
+#         self.forecastLbl.pack(side=TOP, anchor=W)
+
+        self.tempLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
+        self.tempLbl.pack(side=TOP, anchor=W)
+        self.wind_speedLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
+        self.wind_speedLbl.pack(side=TOP, anchor=W)
+        self.descriptionLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
+        self.descriptionLbl.pack(side=TOP, anchor=W)  
+        self.sunriseLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
+        self.sunriseLbl.pack(side=TOP, anchor=W)
+        self.sunsetLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
+        self.sunsetLbl.pack(side=TOP, anchor=W)
+        self.locationLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
         self.locationLbl.pack(side=TOP, anchor=W)
+        self.Latest_Covid = Label(self,text=self.Covid, font=('Helvetica', small_text_size), fg="white", bg="black")
+        self.Latest_Covid.pack(side=TOP, anchor=W)
+        self.Latest_ConfirmedLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
+        self.Latest_ConfirmedLbl.pack(side=TOP, anchor=W)
+        self.Latest_RecoveredLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
+        self.Latest_RecoveredLbl.pack(side=TOP, anchor=W)
+        self.Latest_DeathsLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
+        self.Latest_DeathsLbl.pack(side=TOP, anchor=W)
         self.get_weather()
 
     def get_ip(self):
@@ -131,65 +159,88 @@ class Weather(Frame):
         except Exception as e:
             traceback.print_exc()
             return "Error: %s. Cannot get ip." % e
-
+        
     def get_weather(self):
         try:
 
             if latitude is None and longitude is None:
                 # get location
-                location_req_url = "http://freegeoip.net/json/%s" % self.get_ip()
+                ip_url = "http://ipv4.jsonip.com/"
+                req = requests.get(ip_url)
+                ip_json = json.loads(req.text)['ip']
+
+                location_req_url = 'https://api.ipregistry.co/{}?key=8uiht4cuy7eg5h'.format(ip_json) 
                 r = requests.get(location_req_url)
+
                 location_obj = json.loads(r.text)
+                lat = location_obj['location']['latitude']
+                long = location_obj['location']['longitude']
+                city_info=location_obj['location']['city']
+                region=location_obj['location']['region']['code']
+                location2 = "%s, %s" % (location_obj['location']['city'], location_obj['location']['region']['code'])
 
-                lat = location_obj['latitude']
-                lon = location_obj['longitude']
+                weather_url='http://api.openweathermap.org/data/2.5/weather?q={}&appid=abbe7a4f83dc934bffc619d5957bdcb0'.format(city_info)
 
-                location2 = "%s, %s" % (location_obj['city'], location_obj['region_code'])
 
-                # get weather
-                weather_req_url = "https://api.darksky.net/forecast/%s/%s,%s?lang=%s&units=%s" % (weather_api_token, lat,lon,weather_lang,weather_unit)
-            else:
-                location2 = ""
-                # get weather
-                weather_req_url = "https://api.darksky.net/forecast/%s/%s,%s?lang=%s&units=%s" % (weather_api_token, latitude, longitude, weather_lang, weather_unit)
-
-            r = requests.get(weather_req_url)
-            weather_obj = json.loads(r.text)
-
-            degree_sign= u'\N{DEGREE SIGN}'
-            temperature2 = "%s%s" % (str(int(weather_obj['currently']['temperature'])), degree_sign)
-            currently2 = weather_obj['currently']['summary']
-            forecast2 = weather_obj["hourly"]["summary"]
-
-            icon_id = weather_obj['currently']['icon']
-            icon2 = None
-
-            if icon_id in icon_lookup:
-                icon2 = icon_lookup[icon_id]
-
-            if icon2 is not None:
-                if self.icon != icon2:
-                    self.icon = icon2
-                    image = Image.open(icon2)
-                    image = image.resize((100, 100), Image.ANTIALIAS)
-                    image = image.convert('RGB')
-                    photo = ImageTk.PhotoImage(image)
-
-                    self.iconLbl.config(image=photo)
-                    self.iconLbl.image = photo
-            else:
-                # remove image
-                self.iconLbl.config(image='')
-
-            if self.currently != currently2:
-                self.currently = currently2
-                self.currentlyLbl.config(text=currently2)
-            if self.forecast != forecast2:
-                self.forecast = forecast2
-                self.forecastLbl.config(text=forecast2)
-            if self.temperature != temperature2:
-                self.temperature = temperature2
-                self.temperatureLbl.config(text=temperature2)
+            res=requests.get(weather_url)
+            data=res.json()
+            temp2=round(convert_kelvin_to_Celsius(data['main']['temp']),1)
+            wind_speed2=data['wind']['speed']
+            description2=data['weather'][0]['description']
+            temp3='Temperature: {}°C'.format(temp2)
+            wind_speed3='Wind Speed: {} m/s'.format(wind_speed2)
+            description3='Description: {}'.format(description2)
+            sunrise2=data['sys']['sunrise']
+            sunset2=data['sys']['sunset']
+            utc_sunrise2 = datetime.fromtimestamp(sunrise2) 
+            
+            utc_sunset2 = datetime.fromtimestamp(sunset2)
+           
+            utc_sunrise3=utc_sunrise2.strftime("%H:%M:%S")
+            utc_sunset3=utc_sunset2.strftime("%H:%M:%S")
+            utc_sunrise4='Sunrise: {}'.format(utc_sunrise3)
+            utc_sunset4='Sunset: {}'.format(utc_sunset3)
+            data1=requests.get('https://api.covid19india.org/states_daily.json')
+            data2=data1.json()
+            length_data=len(data2['states_daily'])
+            Latest_Confirmed2=data2['states_daily'][length_data-3]['tt']
+            Latest_Recovered2=data2['states_daily'][length_data-2]['tt']
+            Latest_Deaths2=data2['states_daily'][length_data-1]['tt']
+            Latest_Confirmed3='Confirmed: {}'.format(Latest_Confirmed2)
+            Latest_Recovered3='Recovered: {}'.format(Latest_Recovered2)
+            Latest_Deaths3='Deaths: {}'.format(Latest_Deaths2)
+            
+            if self.Latest_Confirmed != Latest_Confirmed2:
+                self.Latest_Confirmed = Latest_Confirmed2
+                self.Latest_ConfirmedLbl.config(text=Latest_Confirmed3)
+            if self.Latest_Recovered != Latest_Recovered2:
+                self.Latest_Recovered = Latest_Recovered2
+                self.Latest_RecoveredLbl.config(text=Latest_Recovered3)
+            if self.Latest_Deaths != Latest_Deaths2:
+                self.Latest_Deaths = Latest_Deaths2
+                self.Latest_DeathsLbl.config(text=Latest_Deaths3)
+            
+            if self.sunrise != utc_sunrise2:
+                self.sunrise = utc_sunrise2
+                self.sunriseLbl.config(text=utc_sunrise4)
+                
+            if self.sunset != utc_sunset2:
+                self.sunset = utc_sunset2
+                self.sunsetLbl.config(text=utc_sunset4)
+            
+            if self.temp != temp2:
+                self.temp = temp2
+                self.tempLbl.config(text=temp3)
+                
+            if self.wind_speed != wind_speed2:
+                self.wind_speed = wind_speed2
+                self.wind_speedLbl.config(text=wind_speed3)
+            
+            if self.description != description2:
+                self.description = description2
+                self.descriptionLbl.config(text=description3)
+                
+                
             if self.location != location2:
                 if location2 == ", ":
                     self.location = "Cannot Pinpoint Location"
@@ -197,16 +248,25 @@ class Weather(Frame):
                 else:
                     self.location = location2
                     self.locationLbl.config(text=location2)
+            if self.description != description2:
+                self.description = description2
+                self.descriptionLbl.config(text=description3)
+                 
+               # print('Temperature: {}°C'.format(temp))
+                #print('Wind Speed: {} m/s'.format(wind_speed))
+                #print('Description: {}'.format(description)) 
+                
         except Exception as e:
             traceback.print_exc()
-            print "Error: %s. Cannot get weather." % e
+            print ("Error: %s. Cannot get weather." % e)
 
-        self.after(600000, self.get_weather)
-
+        self.after(10000, self.get_weather)       
+ 
     @staticmethod
     def convert_kelvin_to_fahrenheit(kelvin_temp):
         return 1.8 * (kelvin_temp - 273) + 32
-
+def convert_kelvin_to_Celsius(kelvin_temp):
+        return (kelvin_temp - 273)
 
 class News(Frame):
     def __init__(self, parent, *args, **kwargs):
@@ -231,14 +291,15 @@ class News(Frame):
 
             feed = feedparser.parse(headlines_url)
 
-            for post in feed.entries[0:5]:
+            for post in feed.entries[0:9]:
                 headline = NewsHeadline(self.headlinesContainer, post.title)
                 headline.pack(side=TOP, anchor=W)
+                
         except Exception as e:
             traceback.print_exc()
-            print "Error: %s. Cannot get news." % e
+            print ("Error: %s. Cannot get news." % e)
 
-        self.after(600000, self.get_headlines)
+        self.after(10000, self.get_headlines)
 
 
 class NewsHeadline(Frame):
@@ -307,13 +368,13 @@ class FullscreenWindow:
         self.clock.pack(side=RIGHT, anchor=N, padx=100, pady=60)
         # weather
         self.weather = Weather(self.topFrame)
-        self.weather.pack(side=LEFT, anchor=N, padx=100, pady=60)
+        self.weather.pack(side=LEFT, anchor=N, padx=100, pady=30)
         # news
         self.news = News(self.bottomFrame)
         self.news.pack(side=LEFT, anchor=S, padx=100, pady=60)
         # calender - removing for now
-        # self.calender = Calendar(self.bottomFrame)
-        # self.calender.pack(side = RIGHT, anchor=S, padx=100, pady=60)
+#         self.calender = Calendar(self.bottomFrame)
+#         self.calender.pack(side = RIGHT, anchor=S, padx=100, pady=60)
 
     def toggle_fullscreen(self, event=None):
         self.state = not self.state  # Just toggling the boolean
