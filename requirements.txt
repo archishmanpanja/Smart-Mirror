@@ -1,3 +1,7 @@
 requests
 feedparser
 Pillow
+pyaudio
+speech_recognition
+ollama
+pyttsx3
