@@ -29,7 +29,7 @@ xlarge_text_size = 94
 large_text_size = 48
 medium_text_size = 20
 small_text_size = 13
-
+ipregistry_key='jvlysguuxxoajrw9'
 @contextmanager
 def setlocale(name): #thread proof function to work with locale
     with LOCALE_LOCK:
@@ -116,7 +116,7 @@ class Weather(Frame):
         self.Latest_Confirmed=''
         self.Latest_Recovered=''
         self.Latest_Deaths=''
-        self.Covid='Latest Coronavirus Update'
+        #self.Covid='Latest Coronavirus Update'
         self.degreeFrm = Frame(self, bg="black")
         self.degreeFrm.pack(side=TOP, anchor=W)
 #         self.temperatureLbl = Label(self.degreeFrm, font=('Helvetica', xlarge_text_size), fg="white", bg="black")
@@ -140,8 +140,8 @@ class Weather(Frame):
         self.sunsetLbl.pack(side=TOP, anchor=W)
         self.locationLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
         self.locationLbl.pack(side=TOP, anchor=W)
-        self.Latest_Covid = Label(self,text=self.Covid, font=('Helvetica', small_text_size), fg="white", bg="black")
-        self.Latest_Covid.pack(side=TOP, anchor=W)
+        #self.Latest_Covid = Label(self,text=self.Covid, font=('Helvetica', small_text_size), fg="white", bg="black")
+        #self.Latest_Covid.pack(side=TOP, anchor=W)
         self.Latest_ConfirmedLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
         self.Latest_ConfirmedLbl.pack(side=TOP, anchor=W)
         self.Latest_RecoveredLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
@@ -169,7 +169,7 @@ class Weather(Frame):
                 req = requests.get(ip_url)
                 ip_json = json.loads(req.text)['ip']
 
-                location_req_url = 'https://api.ipregistry.co/{}?key=8uiht4cuy7eg5h'.format(ip_json) 
+                location_req_url = f'https://api.ipregistry.co/{ip_json}?key={ipregistry_key}'
                 r = requests.get(location_req_url)
 
                 location_obj = json.loads(r.text)
@@ -201,24 +201,24 @@ class Weather(Frame):
             utc_sunrise4='Sunrise: {}'.format(utc_sunrise3)
             utc_sunset4='Sunset: {}'.format(utc_sunset3)
             data1=requests.get('https://api.covid19india.org/states_daily.json')
-            data2=data1.json()
-            length_data=len(data2['states_daily'])
-            Latest_Confirmed2=data2['states_daily'][length_data-3]['tt']
-            Latest_Recovered2=data2['states_daily'][length_data-2]['tt']
-            Latest_Deaths2=data2['states_daily'][length_data-1]['tt']
-            Latest_Confirmed3='Confirmed: {}'.format(Latest_Confirmed2)
-            Latest_Recovered3='Recovered: {}'.format(Latest_Recovered2)
-            Latest_Deaths3='Deaths: {}'.format(Latest_Deaths2)
+            #data2=data1.json()
+            #length_data=len(data2['states_daily'])
+            #Latest_Confirmed2=data2['states_daily'][length_data-3]['tt']
+            #Latest_Recovered2=data2['states_daily'][length_data-2]['tt']
+            #Latest_Deaths2=data2['states_daily'][length_data-1]['tt']
+            #Latest_Confirmed3='Confirmed: {}'.format(Latest_Confirmed2)
+            #Latest_Recovered3='Recovered: {}'.format(Latest_Recovered2)
+            #Latest_Deaths3='Deaths: {}'.format(Latest_Deaths2)
             
-            if self.Latest_Confirmed != Latest_Confirmed2:
-                self.Latest_Confirmed = Latest_Confirmed2
-                self.Latest_ConfirmedLbl.config(text=Latest_Confirmed3)
-            if self.Latest_Recovered != Latest_Recovered2:
-                self.Latest_Recovered = Latest_Recovered2
-                self.Latest_RecoveredLbl.config(text=Latest_Recovered3)
-            if self.Latest_Deaths != Latest_Deaths2:
-                self.Latest_Deaths = Latest_Deaths2
-                self.Latest_DeathsLbl.config(text=Latest_Deaths3)
+            #if self.Latest_Confirmed != Latest_Confirmed2:
+            #    self.Latest_Confirmed = Latest_Confirmed2
+            #    self.Latest_ConfirmedLbl.config(text=Latest_Confirmed3)
+            #if self.Latest_Recovered != Latest_Recovered2:
+            #    self.Latest_Recovered = Latest_Recovered2
+            #    self.Latest_RecoveredLbl.config(text=Latest_Recovered3)
+            #if self.Latest_Deaths != Latest_Deaths2:
+            #    self.Latest_Deaths = Latest_Deaths2
+            #    self.Latest_DeathsLbl.config(text=Latest_Deaths3)
             
             if self.sunrise != utc_sunrise2:
                 self.sunrise = utc_sunrise2
@@ -307,7 +307,7 @@ class NewsHeadline(Frame):
         Frame.__init__(self, parent, bg='black')
 
         image = Image.open("assets/Newspaper.png")
-        image = image.resize((25, 25), Image.ANTIALIAS)
+        image = image.resize((25, 25), Image.LANCZOS)
         image = image.convert('RGB')
         photo = ImageTk.PhotoImage(image)
 
