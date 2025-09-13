@@ -1,6 +1,8 @@
 from tkinter import *
+import tkinter as tk
 import locale
 import threading
+import queue
 import time
 import requests
 import json
@@ -8,11 +10,19 @@ import traceback
 import feedparser
 from datetime import datetime
 from dateutil import tz
-
-
-
+import pyaudio
+import speech_recognition as sr
+from ollama import chat
+import pyttsx3
 from PIL import Image, ImageTk
 from contextlib import contextmanager
+
+# Use a queue to pass messages from the worker thread to the main thread
+update_queue = queue.Queue()
+
+# Initialize recognizer and pyttsx3 engine
+recognizer = sr.Recognizer()
+engine = pyttsx3.init()
 
 LOCALE_LOCK = threading.Lock()
 
@@ -30,6 +40,7 @@ large_text_size = 48
 medium_text_size = 20
 small_text_size = 13
 ipregistry_key='jvlysguuxxoajrw9'
+
 @contextmanager
 def setlocale(name): #thread proof function to work with locale
     with LOCALE_LOCK:
@@ -57,6 +68,90 @@ icon_lookup = {
     'hail': "assests/Hail.png"  # hail
 }
 
+# --- Patch for AttributeError: '_last_child_ids' ---
+if not hasattr(tk.Tk, '_last_child_ids'):
+    def _winfo_children(self):
+        result = self.tk.splitlist(self.tk.call('winfo', 'children', self._w))
+        return [self.nametowidget(x) for x in result]
+    tk.Tk.winfo_children = _winfo_children
+# --- End of patch ---
+
+def run_speech_and_llm():
+    """
+    Function to run continuously in a separate thread.
+    It handles speech recognition, LLM interaction, and text-to-speech.
+    """
+    while True:
+        try:
+            # Step 1: Capture audio from the microphone
+            update_queue.put("Listening... Speak now!\n")
+            with sr.Microphone() as source:
+                recognizer.adjust_for_ambient_noise(source, duration=1)
+                audio = recognizer.listen(source, timeout=5)
+
+            # Step 2: Convert speech to text
+            update_queue.put("Processing your speech...\n")
+            recognized_text = recognizer.recognize_google(audio)
+            update_queue.put(f"You said: {recognized_text}\n")
+
+            # Step 3: Interact with Ollama
+            full_response_text = ""
+            update_queue.put("LLM Response: ")
+            stream = chat(
+                model='deepseek-r1:1.5b',
+                messages=[{'role': 'user', 'content': recognized_text}],
+                stream=True,
+            )
+            for chunk in stream:
+                content = chunk['message']['content']
+                full_response_text += content
+                # Send chunks to the main thread for real-time display
+                update_queue.put(content)
+            update_queue.put("\n")
+
+            # Step 4: Perform Text-to-Speech (TTS)
+            engine.say(full_response_text)
+            engine.runAndWait()
+
+        except sr.WaitTimeoutError:
+            continue
+        except sr.UnknownValueError:
+            update_queue.put("Sorry, I could not understand the audio.\n")
+        except sr.RequestError as e:
+            update_queue.put(f"Could not request results; {e}\n")
+        except Exception as e:
+            update_queue.put(f"An error occurred: {e}\n")
+        
+        time.sleep(1)
+
+def check_queue(text_widget):
+    """
+    Checks the queue for new messages from the worker thread and updates the GUI.
+    This function runs in the main Tkinter thread.
+    """
+    try:
+        while True:
+            message = update_queue.get_nowait()
+            text_widget.config(state=tk.NORMAL)
+            text_widget.insert(tk.END, message)
+            text_widget.see(tk.END)
+            text_widget.config(state=tk.DISABLED)
+            update_queue.task_done()
+    except queue.Empty:
+        pass
+    
+    text_widget.after(1000, check_queue, text_widget)
+
+class SpeechRecognitionDisplay(Frame):
+    def __init__(self, parent, *args, **kwargs):
+        Frame.__init__(self, parent, bg='black')
+        
+        self.text_area = tk.Text(self, wrap="word", width=80, height=10, state=tk.DISABLED,
+                                 bg="black", fg="white", font=('Helvetica', small_text_size))
+        self.text_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        
+        # Start the queue checker
+        self.text_area.after(100, check_queue, self.text_area)
 
 class Clock(Frame):
     def __init__(self, parent, *args, **kwargs):
@@ -95,10 +190,7 @@ class Clock(Frame):
                 self.date1 = date2
                 self.dateLbl.config(text=date2)
             # calls itself every 200 milliseconds
-            # to update the time display as needed
-            # could use >200 ms, but display gets jerky
             self.timeLbl.after(200, self.tick)
-
 
 class Weather(Frame):
     def __init__(self, parent, *args, **kwargs):
@@ -116,18 +208,14 @@ class Weather(Frame):
         self.Latest_Confirmed=''
         self.Latest_Recovered=''
         self.Latest_Deaths=''
-        #self.Covid='Latest Coronavirus Update'
         self.degreeFrm = Frame(self, bg="black")
         self.degreeFrm.pack(side=TOP, anchor=W)
-#         self.temperatureLbl = Label(self.degreeFrm, font=('Helvetica', xlarge_text_size), fg="white", bg="black")
-#         self.temperatureLbl.pack(side=LEFT, anchor=N)
-#         self.iconLbl = Label(self.degreeFrm, bg="black")
-#         self.iconLbl.pack(side=LEFT, anchor=N, padx=20)
-#         self.currentlyLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
-#         self.currentlyLbl.pack(side=TOP, anchor=W)
-#         self.forecastLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
-#         self.forecastLbl.pack(side=TOP, anchor=W)
-
+        self.temperatureLbl = Label(self.degreeFrm, font=('Helvetica', xlarge_text_size), fg="white", bg="black")
+        self.temperatureLbl.pack(side=LEFT, anchor=N)
+        self.iconLbl = Label(self.degreeFrm, bg="black")
+        self.iconLbl.pack(side=LEFT, anchor=N, padx=20)
+        self.currentlyLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
+        self.currentlyLbl.pack(side=TOP, anchor=W)
         self.tempLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
         self.tempLbl.pack(side=TOP, anchor=W)
         self.wind_speedLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
@@ -140,14 +228,8 @@ class Weather(Frame):
         self.sunsetLbl.pack(side=TOP, anchor=W)
         self.locationLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
         self.locationLbl.pack(side=TOP, anchor=W)
-        #self.Latest_Covid = Label(self,text=self.Covid, font=('Helvetica', small_text_size), fg="white", bg="black")
-        #self.Latest_Covid.pack(side=TOP, anchor=W)
-        self.Latest_ConfirmedLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
-        self.Latest_ConfirmedLbl.pack(side=TOP, anchor=W)
-        self.Latest_RecoveredLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
-        self.Latest_RecoveredLbl.pack(side=TOP, anchor=W)
-        self.Latest_DeathsLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
-        self.Latest_DeathsLbl.pack(side=TOP, anchor=W)
+# The rest of your existing classes (News, Calendar, etc.) would go here.
+# For simplicity, we only include the relevant parts from the provided code.
         self.get_weather()
 
     def get_ip(self):
@@ -201,24 +283,7 @@ class Weather(Frame):
             utc_sunrise4='Sunrise: {}'.format(utc_sunrise3)
             utc_sunset4='Sunset: {}'.format(utc_sunset3)
             data1=requests.get('https://api.covid19india.org/states_daily.json')
-            #data2=data1.json()
-            #length_data=len(data2['states_daily'])
-            #Latest_Confirmed2=data2['states_daily'][length_data-3]['tt']
-            #Latest_Recovered2=data2['states_daily'][length_data-2]['tt']
-            #Latest_Deaths2=data2['states_daily'][length_data-1]['tt']
-            #Latest_Confirmed3='Confirmed: {}'.format(Latest_Confirmed2)
-            #Latest_Recovered3='Recovered: {}'.format(Latest_Recovered2)
-            #Latest_Deaths3='Deaths: {}'.format(Latest_Deaths2)
-            
-            #if self.Latest_Confirmed != Latest_Confirmed2:
-            #    self.Latest_Confirmed = Latest_Confirmed2
-            #    self.Latest_ConfirmedLbl.config(text=Latest_Confirmed3)
-            #if self.Latest_Recovered != Latest_Recovered2:
-            #    self.Latest_Recovered = Latest_Recovered2
-            #    self.Latest_RecoveredLbl.config(text=Latest_Recovered3)
-            #if self.Latest_Deaths != Latest_Deaths2:
-            #    self.Latest_Deaths = Latest_Deaths2
-            #    self.Latest_DeathsLbl.config(text=Latest_Deaths3)
+
             
             if self.sunrise != utc_sunrise2:
                 self.sunrise = utc_sunrise2
@@ -262,8 +327,8 @@ class Weather(Frame):
 
         self.after(10000, self.get_weather)       
  
-    @staticmethod
-    def convert_kelvin_to_fahrenheit(kelvin_temp):
+@staticmethod
+def convert_kelvin_to_fahrenheit(kelvin_temp):
         return 1.8 * (kelvin_temp - 273) + 32
 def convert_kelvin_to_Celsius(kelvin_temp):
         return (kelvin_temp - 273)
@@ -323,7 +388,7 @@ class NewsHeadline(Frame):
 class Calendar(Frame):
     def __init__(self, parent, *args, **kwargs):
         Frame.__init__(self, parent, bg='black')
-        self.title = 'Calendar Events'
+        self.title = 'Ask me'
         self.calendarLbl = Label(self, text=self.title, font=('Helvetica', medium_text_size), fg="white", bg="black")
         self.calendarLbl.pack(side=TOP, anchor=E)
         self.calendarEventContainer = Frame(self, bg='black')
@@ -351,41 +416,54 @@ class CalendarEvent(Frame):
         self.eventNameLbl.pack(side=TOP, anchor=E)
 
 
-class FullscreenWindow:
 
+class FullscreenWindow:
     def __init__(self):
         self.tk = Tk()
         self.tk.configure(background='black')
+        self.tk.bind('<Escape>', self.toggle_fullscreen)
+        self.tk.bind('<F11>', self.toggle_fullscreen)
+        self.frame = Frame(self.tk, background='black')
+        self.frame.pack(fill='both', expand=True)
         self.topFrame = Frame(self.tk, background = 'black')
         self.bottomFrame = Frame(self.tk, background = 'black')
         self.topFrame.pack(side = TOP, fill=BOTH, expand = YES)
         self.bottomFrame.pack(side = BOTTOM, fill=BOTH, expand = YES)
+
         self.state = False
         self.tk.bind("<Return>", self.toggle_fullscreen)
         self.tk.bind("<Escape>", self.end_fullscreen)
-        # clock
-        self.clock = Clock(self.topFrame)
-        self.clock.pack(side=RIGHT, anchor=N, padx=100, pady=60)
+
+        # Voice Assistant display
+        self.speech_display = SpeechRecognitionDisplay(self.frame)
+        self.speech_display.pack(side=TOP, fill=X)
+
+        # Clock display
+        self.clock = Clock(self.frame)
+        self.clock.pack(side=RIGHT, anchor=N, padx=20, pady=60)
+
         # weather
         self.weather = Weather(self.topFrame)
         self.weather.pack(side=LEFT, anchor=N, padx=100, pady=30)
         # news
-        self.news = News(self.bottomFrame)
-        self.news.pack(side=LEFT, anchor=S, padx=100, pady=60)
-        # calender - removing for now
-#         self.calender = Calendar(self.bottomFrame)
-#         self.calender.pack(side = RIGHT, anchor=S, padx=100, pady=60)
+        self.news = News(self.topFrame)
+        self.news.pack(side=RIGHT, anchor=S, padx=100, pady=90)
+        
+        # Start the continuous voice recognition in a daemon thread
+        threading.Thread(target=run_speech_and_llm, daemon=True).start()
 
     def toggle_fullscreen(self, event=None):
-        self.state = not self.state  # Just toggling the boolean
+        self.state = not self.state # Just toggling the boolean
         self.tk.attributes("-fullscreen", self.state)
         return "break"
-
     def end_fullscreen(self, event=None):
         self.state = False
         self.tk.attributes("-fullscreen", False)
         return "break"
 
+    def run(self):
+        self.tk.mainloop()
+
 if __name__ == '__main__':
     w = FullscreenWindow()
-    w.tk.mainloop()
+    w.run()
